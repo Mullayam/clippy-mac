@@ -1,6 +1,8 @@
 const Footer = () => (
-    <footer className="sticky bottom-0 w-full bg-neutral-800 text-white text-center py-2 text-sm shadow-inner">
-        <p>crafted by Mulayam in Software Enginner - Oraczen</p>
-    </footer>
-);
-export default Footer;  
+  <footer className="flex items-center justify-center px-4 py-2
+    border-t border-black/5 dark:border-white/10
+    text-[11px] text-gray-400 dark:text-gray-500 select-none backdrop-blur-sm">
+    <span>⌘⇧V to toggle</span>
+  </footer>
+)
+export default Footer

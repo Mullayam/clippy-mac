@@ -1,20 +1,14 @@
-export { };
+export {}
 
 declare global {
   interface Window {
-
     clipboardAPI: {
-      getHistory: () => Promise<any[]>;
-      onUpdate: (callback: (data: any[]) => void) => void;
-      minimize: () => void;
-      maximize: () => void;
-      close: () => void;
-    };
+      onUpdate: (callback: (data: any[]) => void) => () => void
+      onThemeChange: (callback: (theme: 'dark' | 'light') => void) => () => void
+      copyToClipboard: (text: string) => void
+      copyAndHide: (text: string) => void
+      minimize: () => void
+      close: () => void
+    }
   }
-}
-interface ClipboardItem {
-  id: string;
-  text: string;
-  timestamp: Date;
-  type: 'text' | 'url' | 'code';
 }

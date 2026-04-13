@@ -1,56 +1,73 @@
-import { useEffect, useState } from 'react'
-import { Copy, Trash2, Check } from 'lucide-react'
+import { useEffect, useState, useRef, useCallback } from 'react'
 import { db, ClipboardItem } from '../lib/idb'
+import SearchBar from './SearchBar'
+import ClipItem from './ClipItem'
+import EmptyState from './EmptyState'
 
-function Clipboard() {
+export default function Clipboard() {
   const [history, setHistory] = useState<ClipboardItem[]>([])
+  const [copiedId, setCopiedId] = useState<number | null>(null)
+  const [search, setSearch] = useState('')
+  const [selectedIndex, setSelectedIndex] = useState(-1)
+  const listRef = useRef<HTMLDivElement>(null)
 
-  const [copiedId, setCopiedId] = useState<string | null>(null)
-  const getRelativeTime = (timestamp: number) => {
-    const now = Date.now()
-    const diffInMinutes = Math.floor((now - timestamp) / (1000 * 60))
+  const handleCopy = useCallback((text: string, id: number) => {
+    window.clipboardAPI.copyToClipboard(text)
+    setCopiedId(id)
+    setTimeout(() => setCopiedId(null), 1500)
+  }, [])
 
-    if (diffInMinutes < 1) return 'Just now'
-    if (diffInMinutes < 60) return `${diffInMinutes}m ago`
-    if (diffInMinutes < 1440) return `${Math.floor(diffInMinutes / 60)}h ago`
-    return `${Math.floor(diffInMinutes / 1440)}d ago`
-  }
+  const handleItemClick = useCallback((item: ClipboardItem) => {
+    window.clipboardAPI.copyAndHide(item.content)
+  }, [])
 
-  const getTypeColor = (type: string) => {
-    switch (type) {
-      case 'url':
-        return 'bg-blue-100 text-blue-700'
-      case 'code':
-        return 'bg-green-100 text-green-700'
-      default:
-        return 'bg-gray-100 text-gray-700'
-    }
-  }
+  const handleDelete = useCallback(async (id: number) => {
+    await db.deleteItem(id)
+    setHistory((prev) => prev.filter((item) => item.id !== id))
+  }, [])
 
-  const handleCopy = async (text: string, id: string) => {
-    try {
-      await navigator.clipboard.writeText(text)
-      setCopiedId(id)
-      setTimeout(() => setCopiedId(null), 2000)
-    } catch (err) {
-      console.error('Failed to copy text: ', err)
-    }
-  }
-
-  const handleDelete = (index: string) => {
-    setHistory((history) => history.filter((item) => item.id.toString() !== index))
-  }
- const handleClear = () => {
+  const handleClear = useCallback(async () => {
+    await db.clearHistory()
     setHistory([])
-    db.clearHistory().catch((err) => console.error('Failed to clear history:', err))
-  }
-  const handleItemClick = (item: ClipboardItem) => {
-    handleCopy(item.content, item.id.toString())
-  }
+  }, [])
+
+  const filtered = search
+    ? history.filter(
+        (item) => item.type === 'text' && item.content.toLowerCase().includes(search.toLowerCase())
+      )
+    : history
+
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'ArrowDown') {
+        e.preventDefault()
+        setSelectedIndex((prev) => Math.min(prev + 1, filtered.length - 1))
+      } else if (e.key === 'ArrowUp') {
+        e.preventDefault()
+        setSelectedIndex((prev) => Math.max(prev - 1, 0))
+      } else if (e.key === 'Enter' && selectedIndex >= 0 && selectedIndex < filtered.length) {
+        e.preventDefault()
+        handleItemClick(filtered[selectedIndex])
+      } else if (e.key === 'Escape') {
+        window.clipboardAPI.close()
+      }
+    }
+    window.addEventListener('keydown', handleKeyDown)
+    return () => window.removeEventListener('keydown', handleKeyDown)
+  }, [filtered, selectedIndex, handleItemClick])
+
+  useEffect(() => {
+    if (selectedIndex >= 0 && listRef.current) {
+      const items = listRef.current.querySelectorAll('[data-clipboard-item]')
+      items[selectedIndex]?.scrollIntoView({ block: 'nearest' })
+    }
+  }, [selectedIndex])
+
+  useEffect(() => setSelectedIndex(-1), [search])
+
   useEffect(() => {
     db.getHistory().then(setHistory)
-    window.clipboardAPI.onUpdate(async (items: ClipboardItem[]) => {
-
+    const cleanup = window.clipboardAPI.onUpdate(async (items: ClipboardItem[]) => {
       const latest = items[0]
       if (latest) {
         await db.addItem(latest)
@@ -58,96 +75,48 @@ function Clipboard() {
         setHistory(updated)
       }
     })
+    return cleanup
   }, [])
+
   return (
-    <div className="max-w-2xl mx-auto flex-1">
-      {/* Clipboard Items Container */}
-      <div className="bg-white rounded-lg border border-gray-200 shadow-sm">
-        {/* Header */}
-        <div className="px-4 py-3 border-b border-gray-200 flex items-center justify-between">
-        <h2 className="text-sm font-medium text-gray-900">Recent Items ({history.length})</h2>
-        <p className="text-xs text-gray-500 cursor-pointer" onClick={handleClear}> Clear All</p>
-        </div>
+    <div className="flex flex-col flex-1 min-h-0">
+      <SearchBar value={search} onChange={setSearch} />
 
-        {/* Scrollable Items List */}
-        <div className="max-h-full overflow-y-auto">
-          {history.length === 0 ? (
-            <div className="p-8 text-center">
-              <div className="text-gray-400 mb-2">
-                <Copy className="w-8 h-8 mx-auto" />
-              </div>
-              <p className="text-gray-500">No clipboard items yet</p>
-            </div>
-          ) : (
-            <div className="divide-y divide-gray-100">
-              {history.map((item, index) => (
-                <div
-                  key={index}
-                  onClick={() => handleItemClick(item)}
-                  className="group p-4 hover:bg-gray-50 cursor-pointer transition-colors duration-150"
-                >
-                  <div className="flex items-start justify-between gap-4">
-                    <div className="flex-1 min-w-0">
-                      {/* Type and Time */}
-                      <div className="flex items-center gap-2 mb-2">
-                        <span
-                          className={`px-2 py-1 text-xs font-medium rounded-full ${getTypeColor(item.type)}`}
-                        >
-                          {item.type}
-                        </span>
-                        <span className="text-xs text-gray-500">{getRelativeTime(item.time)}</span>
-                      </div>
+      {/* Toolbar */}
+      <div className="flex items-center justify-between px-3 py-1.5
+        border-b border-black/5 dark:border-white/10 backdrop-blur-sm">
+        <span className="text-[11px] text-gray-500 dark:text-gray-400 font-medium">
+          {filtered.length} item{filtered.length !== 1 ? 's' : ''}
+        </span>
+        {history.length > 0 && (
+          <button
+            onClick={handleClear}
+            className="text-[11px] text-gray-400 dark:text-gray-500
+              hover:text-red-500 dark:hover:text-red-400 transition-colors"
+          >
+            Clear all
+          </button>
+        )}
+      </div>
 
-                      {/* Content */}
-                      <div className="text-sm text-gray-900">
-                        {item.type === 'text' ? (
-                          <p className="text-gray-800">{item.content}</p>
-                        ) : (
-                          <img
-                            src={item.content}
-                            alt="clipboard-img"
-                            className="max-w-full h-48 object-contain rounded"
-                          />
-                        )}
-                      </div>
-                    </div>
-
-                    {/* Action Buttons */}
-                    <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity duration-200">
-                      <button
-                        onClick={(e) => {
-                          e.stopPropagation()
-                          handleCopy(item.content, item.id.toString())
-                        }}
-                        className="p-1.5 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded transition-colors duration-200"
-                        title="Copy"
-                      >
-                        {copiedId === item.id.toString() ? (
-                          <Check className="w-4 h-4 text-green-600" />
-                        ) : (
-                          <Copy className="w-4 h-4" />
-                        )}
-                      </button>
-                      <button
-                        onClick={(e) => {
-                          e.stopPropagation()
-                          handleDelete(item.id.toString())
-                        }}
-                        className="p-1.5 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded transition-colors duration-200"
-                        title="Delete"
-                      >
-                        <Trash2 className="w-4 h-4" />
-                      </button>
-                    </div>
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
+      {/* List */}
+      <div ref={listRef} className="flex-1 overflow-y-auto">
+        {filtered.length === 0 ? (
+          <EmptyState hasSearch={!!search} />
+        ) : (
+          filtered.map((item, index) => (
+            <ClipItem
+              key={item.id}
+              item={item}
+              selected={selectedIndex === index}
+              copied={copiedId === item.id}
+              onItemClick={handleItemClick}
+              onCopy={handleCopy}
+              onDelete={handleDelete}
+            />
+          ))
+        )}
       </div>
     </div>
   )
 }
-
-export default Clipboard

@@ -6,106 +6,114 @@ import {
   Tray,
   Menu,
   globalShortcut,
-  nativeImage
+  nativeImage,
+  nativeTheme,
+  clipboard
 } from 'electron'
 import path, { join } from 'path'
 import { electronApp, optimizer, is } from '@electron-toolkit/utils'
-import { startClipboardPolling } from './clipboard-api'
+import { startClipboardPolling, suppressNextPoll } from './clipboard-api'
 
 let mainWindow: BrowserWindow | null = null
 let tray: Tray | null = null
-let isWindowVisible = false
 const icon = path.join(__dirname, '../../resources/clipboard16.png')
 const iconHD = path.join(__dirname, '../../resources/clipboard512.png')
 
-function createTray() {
+function createTray(): void {
   tray = new Tray(icon)
 
   const contextMenu = Menu.buildFromTemplate([
-    {
-      label: 'Open Clipboard',
-      click: () => toggleWindow()
-    },
+    { label: 'Open Clipboard', click: () => toggleWindow() },
     { type: 'separator' },
     { label: 'Quit', click: () => app.quit() }
   ])
 
   tray.setToolTip('Clipboard Manager')
   tray.setContextMenu(contextMenu)
-
   tray.on('click', () => toggleWindow())
 }
-function registerShortcut() {
+
+function registerShortcut(): void {
   globalShortcut.register('CommandOrControl+Shift+V', () => {
     toggleWindow()
   })
 }
+
+function registerIPC(): void {
+  ipcMain.on('minimize-window', () => mainWindow?.hide())
+  ipcMain.on('close-window', () => mainWindow?.hide())
+
+  ipcMain.on('copy-to-clipboard', (_event: Electron.IpcMainEvent, text: string) => {
+    suppressNextPoll()
+    clipboard.writeText(text)
+  })
+
+  ipcMain.on('copy-and-hide', (_event: Electron.IpcMainEvent, text: string) => {
+    suppressNextPoll()
+    clipboard.writeText(text)
+    mainWindow?.hide()
+  })
+}
+
+function sendTheme(): void {
+  const theme = nativeTheme.shouldUseDarkColors ? 'dark' : 'light'
+  mainWindow?.webContents.send('theme-changed', theme)
+}
+
 function createWindow(): void {
-  // Create the browser window.
   mainWindow = new BrowserWindow({
-    width: 400,
-    height: 600,
+    width: 380,
+    height: 520,
     show: false,
     autoHideMenuBar: true,
     frame: false,
-
-    titleBarStyle: 'hiddenInset', // Optional: cleaner mac look
+    transparent: true,
+    vibrancy: 'under-window',
+    visualEffectState: 'active',
+    backgroundColor: '#00000000',
     icon: iconHD,
-    title: 'Clip Mac',
+    title: 'Clipboard History',
     resizable: false,
     maximizable: false,
     minimizable: false,
-    closable: false,
-    darkTheme: true,
+    skipTaskbar: true,
+    roundedCorners: true,
     webPreferences: {
       preload: join(__dirname, '../preload/index.js'),
       sandbox: false,
-      nodeIntegration: true,
-      devTools: false
+      devTools: is.dev
     }
   })
 
   mainWindow.on('ready-to-show', () => {
+    sendTheme()
     mainWindow?.show()
   })
+
+  mainWindow.on('blur', () => mainWindow?.hide())
 
   mainWindow.webContents.setWindowOpenHandler((details) => {
     shell.openExternal(details.url)
     return { action: 'deny' }
   })
 
+  nativeTheme.on('updated', () => sendTheme())
+
   if (is.dev && process.env['ELECTRON_RENDERER_URL']) {
     mainWindow.loadURL(process.env['ELECTRON_RENDERER_URL'])
   } else {
     mainWindow.loadFile(join(__dirname, '../renderer/index.html'))
   }
-  ipcMain.on('minimize-window', () => {
-    mainWindow?.minimize()
-  })
-
-  ipcMain.on('maximize-window', () => {
-    if (mainWindow?.isMaximized()) {
-      mainWindow.unmaximize()
-    } else {
-      mainWindow?.maximize()
-    }
-  })
-
-  ipcMain.on('close-window', () => {
-    mainWindow?.close()
-  })
 }
-function toggleWindow() {
-  if (!mainWindow) return
 
-  if (isWindowVisible) {
+function toggleWindow(): void {
+  if (!mainWindow) return
+  if (mainWindow.isVisible()) {
     mainWindow.hide()
   } else {
     mainWindow.show()
     mainWindow.focus()
   }
-
-  isWindowVisible = !isWindowVisible
 }
 
 app.whenReady().then(() => {
@@ -114,25 +122,23 @@ app.whenReady().then(() => {
     optimizer.watchWindowShortcuts(window)
   })
 
-  // IPC test
-  ipcMain.on('ping', () => console.log('pong'))
+  registerIPC()
   createWindow()
   registerShortcut()
   createTray()
   app?.dock?.setIcon(nativeImage.createFromPath(iconHD))
 
   if (mainWindow) {
-    startClipboardPolling(mainWindow) // 🔄 Start polling from earlier step
+    startClipboardPolling(mainWindow)
   }
-  app.on('activate', function () {
+
+  app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow()
   })
 })
 
 app.on('window-all-closed', () => {
-  if (process.platform !== 'darwin') {
-    app.quit()
-  }
+  if (process.platform !== 'darwin') app.quit()
 })
 
 app.on('will-quit', () => {

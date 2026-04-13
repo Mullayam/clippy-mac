@@ -1,30 +1,32 @@
 import { contextBridge, ipcRenderer } from 'electron'
 import { electronAPI } from '@electron-toolkit/preload'
 
-
-
-
-// Custom APIs for renderer
 const api = {}
 
-// Use `contextBridge` APIs to expose Electron APIs to
-// renderer only if context isolation is enabled, otherwise
-// just add to the DOM global.
 if (process.contextIsolated) {
   try {
     contextBridge.exposeInMainWorld('electron', electronAPI)
     contextBridge.exposeInMainWorld('api', api)
     contextBridge.exposeInMainWorld('clipboardAPI', {
-      getHistory: () => ipcRenderer.invoke('get-history'),
       onUpdate: (callback: (data: any[]) => void) => {
-        ipcRenderer.on('clipboard-update', (_, data) => callback(data));
+        const handler = (_: any, data: any[]): void => callback(data)
+        ipcRenderer.on('clipboard-update', handler)
+        return (): void => {
+          ipcRenderer.removeListener('clipboard-update', handler)
+        }
       },
-      sendMessage: (event:string,text: string) => ipcRenderer.send(event, text),
-      clearHistory: () => ipcRenderer.send('clear-history'),
+      onThemeChange: (callback: (theme: 'dark' | 'light') => void) => {
+        const handler = (_: any, theme: 'dark' | 'light'): void => callback(theme)
+        ipcRenderer.on('theme-changed', handler)
+        return (): void => {
+          ipcRenderer.removeListener('theme-changed', handler)
+        }
+      },
+      copyToClipboard: (text: string) => ipcRenderer.send('copy-to-clipboard', text),
+      copyAndHide: (text: string) => ipcRenderer.send('copy-and-hide', text),
       minimize: () => ipcRenderer.send('minimize-window'),
-      maximize: () => ipcRenderer.send('maximize-window'),
       close: () => ipcRenderer.send('close-window'),
-    });
+    })
   } catch (error) {
     console.error(error)
   }
@@ -34,6 +36,3 @@ if (process.contextIsolated) {
   // @ts-ignore (define in dts)
   window.api = api
 }
-
-
-
