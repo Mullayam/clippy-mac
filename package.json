@@ -67,12 +67,12 @@
       "identity": null
     },
     "dmg": {
-      "format": "UDZO"
+      "format": "UDZO",
+      "icon": "resources/icon.icns"
     },
     "files": [
-      "dist/**/*",
-      "resources/**/*",
-      "out/**/*"
+      "out/**/*",
+      "!node_modules/**/*"
     ],
     "extraResources": [
       "resources"

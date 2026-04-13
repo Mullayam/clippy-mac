@@ -16,6 +16,8 @@ import { startClipboardPolling, suppressNextPoll } from './clipboard-api'
 
 let mainWindow: BrowserWindow | null = null
 let tray: Tray | null = null
+let blurTimeout: NodeJS.Timeout | null = null
+let skipBlur = false
 const icon = path.join(__dirname, '../../resources/clipboard16.png')
 const iconHD = path.join(__dirname, '../../resources/clipboard512.png')
 
@@ -90,7 +92,18 @@ function createWindow(): void {
     mainWindow?.show()
   })
 
-  mainWindow.on('blur', () => mainWindow?.hide())
+  mainWindow.on('blur', () => {
+    if (skipBlur) {
+      skipBlur = false
+      return
+    }
+    if (blurTimeout) clearTimeout(blurTimeout)
+    blurTimeout = setTimeout(() => {
+      if (mainWindow && !mainWindow.isFocused()) {
+        mainWindow.hide()
+      }
+    }, 150)
+  })
 
   mainWindow.webContents.setWindowOpenHandler((details) => {
     shell.openExternal(details.url)
@@ -111,6 +124,7 @@ function toggleWindow(): void {
   if (mainWindow.isVisible()) {
     mainWindow.hide()
   } else {
+    skipBlur = true
     mainWindow.show()
     mainWindow.focus()
   }
@@ -118,6 +132,10 @@ function toggleWindow(): void {
 
 app.whenReady().then(() => {
   electronApp.setAppUserModelId('com.mulayam.clipmac')
+
+  // Auto-start on login
+  app.setLoginItemSettings({ openAtLogin: true, openAsHidden: true })
+
   app.on('browser-window-created', (_, window) => {
     optimizer.watchWindowShortcuts(window)
   })
