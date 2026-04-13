@@ -23,7 +23,7 @@ nsis:
   createDesktopShortcut: always
 mac:
   category: public.app-category.productivity
-  icon: resources/clipboard512.png
+  icon: resources/icon.icns
   identity: null
   entitlementsInherit: build/entitlements.mac.plist
   notarize: false

@@ -63,7 +63,7 @@
     "mac": {
       "category": "public.app-category.productivity",
       "target": "dmg",
-      "icon": "resources/clipboard512.png",
+      "icon": "resources/icon.icns",
       "identity": null
     },
     "dmg": {
