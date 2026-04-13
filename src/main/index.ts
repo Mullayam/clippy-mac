@@ -18,11 +18,19 @@ let mainWindow: BrowserWindow | null = null
 let tray: Tray | null = null
 let blurTimeout: NodeJS.Timeout | null = null
 let skipBlur = false
-const icon = path.join(__dirname, '../../resources/clipboard16.png')
-const iconHD = path.join(__dirname, '../../resources/clipboard512.png')
+
+function getResourcePath(filename: string): string {
+  if (is.dev) {
+    return path.join(__dirname, '../../resources', filename)
+  }
+  return path.join(process.resourcesPath, 'resources', filename)
+}
+
+const getIcon = () => getResourcePath('clipboard16.png')
+const getIconHD = () => getResourcePath('clipboard512.png')
 
 function createTray(): void {
-  tray = new Tray(icon)
+  tray = new Tray(getIcon())
 
   const contextMenu = Menu.buildFromTemplate([
     { label: 'Open Clipboard', click: () => toggleWindow() },
@@ -69,11 +77,9 @@ function createWindow(): void {
     show: false,
     autoHideMenuBar: true,
     frame: false,
-    transparent: true,
     vibrancy: 'under-window',
     visualEffectState: 'active',
-    backgroundColor: '#00000000',
-    icon: iconHD,
+    icon: getIconHD(),
     title: 'Clipboard History',
     resizable: false,
     maximizable: false,
@@ -144,7 +150,7 @@ app.whenReady().then(() => {
   createWindow()
   registerShortcut()
   createTray()
-  app?.dock?.setIcon(nativeImage.createFromPath(iconHD))
+  app?.dock?.setIcon(nativeImage.createFromPath(getIconHD()))
 
   if (mainWindow) {
     startClipboardPolling(mainWindow)
