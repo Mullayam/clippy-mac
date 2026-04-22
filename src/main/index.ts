@@ -86,12 +86,16 @@ function createWindow(): void {
     minimizable: false,
     skipTaskbar: true,
     roundedCorners: true,
+    alwaysOnTop: true,
+    type: 'panel',
     webPreferences: {
       preload: join(__dirname, '../preload/index.js'),
       sandbox: false,
       devTools: is.dev
     }
   })
+
+  mainWindow.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true })
 
   mainWindow.on('ready-to-show', () => {
     sendTheme()
@@ -131,6 +135,7 @@ function toggleWindow(): void {
     mainWindow.hide()
   } else {
     skipBlur = true
+    mainWindow.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true })
     mainWindow.show()
     mainWindow.focus()
   }
